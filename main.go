@@ -15,34 +15,45 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
-func eventHandler(evt interface{}) {
-	switch v := evt.(type) {
-	case *events.Message:
-		fmt.Println("Received a message!", v.Message.GetConversation())
-	}
-}
-
 func main() {
-	// |------------------------------------------------------------------------------------------------------|
-	// | NOTE: You must also import the appropriate DB connector, e.g. github.com/mattn/go-sqlite3 for SQLite |
-	// |------------------------------------------------------------------------------------------------------|
-
 	dbLog := waLog.Stdout("Database", "DEBUG", true)
 	container, err := sqlstore.New("sqlite3", "file:examplestore.db?_foreign_keys=on", dbLog)
 	if err != nil {
 		panic(err)
 	}
-	// If you want multiple sessions, remember their JIDs and use .GetDevice(jid) or .GetAllDevices() instead.
 	deviceStore, err := container.GetFirstDevice()
 	if err != nil {
 		panic(err)
 	}
 	clientLog := waLog.Stdout("Client", "DEBUG", true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
-	client.AddEventHandler(eventHandler)
+
+	client.AddEventHandler(func(evt interface{}) {
+		switch v := evt.(type) {
+		case *events.Message:
+			fmt.Println("Received a message!", v.Message.GetConversation())
+			fmt.Println(v.Info.Chat.String())
+		case *events.Connected:
+			fmt.Println("Connected to WhatsApp!")
+		// case *events.AppStateSyncComplete:
+		// 	// Fetch contacts from the device's chat store
+		// 	contacts, err := deviceStore.Contacts.GetAllContacts()
+
+		// 	if err != nil {
+		// 		fmt.Println("Failed to fetch chats:", err)
+		// 		return
+		// 	}
+		// 	fmt.Println("\n--- All Chats ---")
+		// 	for _, contact := range contacts {
+		// 		if contact.FullName != "" {
+		// 			fmt.Printf("- %s (%s) %s\n", contact.FullName, contact.PushName, contact.)
+		// 		}
+		// 	}
+		// 	fmt.Println("-----------------")
+		}
+	})
 
 	if client.Store.ID == nil {
-		// No ID stored, new login
 		qrChan, _ := client.GetQRChannel(context.Background())
 		err = client.Connect()
 		if err != nil {
