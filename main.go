@@ -16,6 +16,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal/v3"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -57,8 +58,8 @@ func callDeepSeek(message string) {
 
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
-			fmt.Println("JSON marshal error:", err)
-			return
+		fmt.Println("JSON marshal error:", err)
+		return
 	}
 
 	client := &http.Client{}
@@ -70,7 +71,7 @@ func callDeepSeek(message string) {
 	}
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Authorization", "Bearer sk-31d0d5c22ac1417a87894b7f0545fc4f")
+	req.Header.Add("Authorization", "Bearer")
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -89,7 +90,7 @@ func callDeepSeek(message string) {
 
 type Conversation struct {
 	gorm.Model
-	JID  string
+	JID  string `gorm:"uniqueIndex"`
 	Name string
 }
 
@@ -109,7 +110,7 @@ func createConversation(JID string, name string) Conversation {
 		Name: name,
 	}
 
-	res := db.Create(&newConversation)
+	res := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&newConversation)
 
 	if res.Error != nil {
 		panic(res.Error)
@@ -173,52 +174,50 @@ func main() {
 			fmt.Println("History sync")
 			for _, conversation := range v.Data.Conversations {
 				if *conversation.ID == "5519983921932@s.whatsapp.net" {
-					createConversation(*conversation.ID, *conversation.Name)
+					var name string
+					if conversation.Name != nil {
+						name = *conversation.Name
+					}
+
+					createConversation(*conversation.ID, name)
 
 					for _, message := range conversation.Messages {
 						fmt.Println(*message.MsgOrderID)
-						fmt.Println(*message.Message.Message.Conversation)
+						fmt.Println(*message.Message.Message.ExtendedTextMessage.Text)
 						fmt.Println(*message.Message.Key.FromMe)
 
-						createMessage(*conversation.ID, *message.Message.Message.Conversation, *message.Message.Key.FromMe, *message.MsgOrderID)
+						createMessage(*conversation.ID, *message.Message.Message.ExtendedTextMessage.Text, *message.Message.Key.FromMe, *message.MsgOrderID)
 					}
 
-					messages := getMessages(*conversation.ID)
+					// jid, _ := types.ParseJID(*conversation.ID)
+					// m1, _ := client.ParseWebMessage(jid, conversation.Messages[len(conversation.Messages)-1].Message)
+					// build := client.BuildHistorySyncRequest(&m1.Info, 50)
+					// client.SendMessage(context.Background(), jid, build)
 
-					var builder strings.Builder
-					builder.WriteString("Please give me a summary of this messages. Please give me the result in portuguese:\\n")
+					if len(conversation.Messages) == 0 {
+						messages := getMessages(*conversation.ID)
 
-					for _, message := range messages {
-						fmt.Println(message.ID)
-						fmt.Println(message.Message)
+						var builder strings.Builder
+						builder.WriteString("Please give me a summary of this messages. Please give me the result in portuguese:\\n")
 
-						if message.IsFromMe {
-							builder.WriteString("Me: ")
-						} else {
-							builder.WriteString("Other: ")
+						for _, message := range messages {
+							fmt.Println(message.ID)
+							fmt.Println(message.Message)
+
+							if message.IsFromMe {
+								builder.WriteString("Me: ")
+							} else {
+								builder.WriteString("Other: ")
+							}
+
+							builder.WriteString(message.Message + "\\n")
 						}
 
-						builder.WriteString(message.Message + "\\n")
+						callDeepSeek(builder.String())
 					}
-
-					callDeepSeek(builder.String())
 				}
 			}
-			// case *events.AppStateSyncComplete:
-			// 	// Fetch contacts from the device's chat store
-			// 	contacts, err := deviceStore.Contacts.GetAllContacts()
 
-			// 	if err != nil {
-			// 		fmt.Println("Failed to fetch chats:", err)
-			// 		return
-			// 	}
-			// 	fmt.Println("\n--- All Chats ---")
-			// 	for _, contact := range contacts {
-			// 		if contact.FullName != "" {
-			// 			fmt.Printf("- %s (%s) %s\n", contact.FullName, contact.PushName, contact.)
-			// 		}
-			// 	}
-			// 	fmt.Println("-----------------")
 		}
 	})
 
